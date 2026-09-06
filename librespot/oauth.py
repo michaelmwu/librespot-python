@@ -31,12 +31,13 @@ class OAuth:
     __oauth_url_callback = None
     __success_page_content = None
     __listen_all_interfaces = False
+    __server_timeout = None
 
     def __init__(self, client_id, redirect_url, oauth_url_callback):
         self.__client_id = client_id
         self.__redirect_url = redirect_url
         self.__oauth_url_callback = oauth_url_callback
-    
+
     def set_success_page_content(self, content):
         self.__success_page_content = content
         return self
@@ -69,6 +70,10 @@ class OAuth:
 
     def set_listen_all(self, listen_all: bool):
         self.__listen_all_interfaces = listen_all
+        return self
+
+    def set_timeout(self, timeout: int):
+        self.__server_timeout = timeout
         return self
 
     def ingest_token_response(self, result):
@@ -154,11 +159,15 @@ class OAuth:
     class CallbackServer(HTTPServer):
         callback_path = None
 
-        def __init__(self, server_address, RequestHandlerClass, callback_path, set_code, success_page_content):
+        def __init__(self, server_address, RequestHandlerClass, callback_path, set_code, success_page_content, timeout = None):
             self.callback_path = callback_path
             self.set_code = set_code
             self.success_page_content = success_page_content
+            self.timeout = timeout
             super().__init__(server_address, RequestHandlerClass)
+    
+        def handle_timeout(self):
+            raise TimeoutError(f"OAuth: Callback server timed out after {self.timeout} seconds")
 
     class CallbackRequestHandler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -199,6 +208,7 @@ class OAuth:
             url.path,
             self.set_code,
             self.__success_page_content,
+            self.__server_timeout
         )
         logging.info("OAuth: Waiting for callback on %s", url.hostname + ":" + str(url.port))
         self.__start_server()

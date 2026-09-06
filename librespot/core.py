@@ -289,10 +289,6 @@ class ApiClient(Closeable):
 
         """
         mdb = self.get_ext_metadata(ExtensionKind.EPISODE_V4, episode.to_spotify_uri())
-        # mdb = self.get_ext_metadata_batched([ExtensionKind.EPISODE_V4,
-        #                                      ExtensionKind.TRACK_V4],
-        #                                     [episode.to_spotify_uri(),
-        #                                     'spotify:track:5EeQQ8BVJTRkp1AIKJILGY'])
         md = Metadata.Episode()
         md.ParseFromString(mdb)
         return md
