@@ -36,7 +36,7 @@ class AbsChunkedInputStream(io.BytesIO, HaltListener):
 
     def __init__(self, retry_on_chunk_error: bool):
         super().__init__()
-        self.closed = False
+        self._stream_closed = False
         self.wait_lock = threading.Condition()
         self.wait_for_chunk = -1
         self.chunk_errors: typing.Dict[int, Exception] = {}
@@ -47,7 +47,7 @@ class AbsChunkedInputStream(io.BytesIO, HaltListener):
         self.retry_on_chunk_error = retry_on_chunk_error
 
     def is_closed(self) -> bool:
-        return self.closed
+        return self._stream_closed
 
     def buffer(self) -> typing.List[bytes]:
         raise NotImplementedError()
@@ -57,7 +57,8 @@ class AbsChunkedInputStream(io.BytesIO, HaltListener):
 
     def close(self) -> None:
         with self.wait_lock:
-            self.closed = True
+            self._stream_closed = True
+            super().close()
             self.wait_lock.notify_all()
 
     def available(self):
@@ -78,7 +79,7 @@ class AbsChunkedInputStream(io.BytesIO, HaltListener):
     def seek(self, where: int, **kwargs) -> None:
         if where < 0:
             raise TypeError()
-        if self.closed:
+        if self._stream_closed:
             raise IOError("Stream is closed!")
         self.__pos = where
         self.check_availability(int(self.__pos / (128 * 1024)), False, False)
@@ -86,7 +87,7 @@ class AbsChunkedInputStream(io.BytesIO, HaltListener):
     def skip(self, n: int) -> int:
         if n < 0:
             raise TypeError()
-        if self.closed:
+        if self._stream_closed:
             raise IOError("Stream is closed!")
         k = self.size() - self.__pos
         if n < k:
@@ -122,7 +123,7 @@ class AbsChunkedInputStream(io.BytesIO, HaltListener):
             prefetch = []
             retry_error = None
             with self.wait_lock:
-                if self.closed:
+                if self._stream_closed:
                     raise IOError("Stream is closed!")
                 if self.available_chunks()[chunk]:
                     return
@@ -159,17 +160,17 @@ class AbsChunkedInputStream(io.BytesIO, HaltListener):
                     self.stream_read_halted(chunk, int(time.time() * 1000))
                 self.wait_for_chunk = chunk
                 self.wait_lock.wait_for(
-                    lambda: self.closed or self.available_chunks()[chunk]
+                    lambda: self._stream_closed or self.available_chunks()[chunk]
                     or chunk in self.chunk_errors)
                 self.wait_for_chunk = -1
-                if self.closed:
+                if self._stream_closed:
                     raise IOError("Stream is closed!")
                 if self.available_chunks()[chunk]:
                     self.stream_read_halted(chunk, int(time.time() * 1000))
                     return
 
     def read(self, __size: int = 0) -> bytes:
-        if self.closed:
+        if self._stream_closed:
             raise IOError("Stream is closed!")
         if __size <= 0:
             if self.__pos == self.size():
@@ -217,7 +218,7 @@ class AbsChunkedInputStream(io.BytesIO, HaltListener):
 
     def notify_chunk_available(self, index: int) -> None:
         with self.wait_lock:
-            if self.closed:
+            if self._stream_closed:
                 return
             self.available_chunks()[index] = True
             self.chunk_errors.pop(index, None)
@@ -228,7 +229,7 @@ class AbsChunkedInputStream(io.BytesIO, HaltListener):
 
     def notify_chunk_error(self, index: int, ex):
         with self.wait_lock:
-            if self.closed:
+            if self._stream_closed:
                 return
             self.available_chunks()[index] = False
             self.requested_chunks()[index] = False

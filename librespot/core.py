@@ -2009,7 +2009,7 @@ class Session(Closeable, MessageListener, SubListener):
             """Flush data to socket"""
             try:
                 self.__buffer.seek(0)
-                self.__socket.send(self.__buffer.read())
+                self.__socket.sendall(self.__buffer.read())
                 self.__buffer = io.BytesIO()
             except BrokenPipeError:
                 pass
@@ -2152,7 +2152,16 @@ class Session(Closeable, MessageListener, SubListener):
                     if self.__running:
                         self.__session.logger.fatal(
                             "Failed reading packet! {}".format(ex))
-                        self.__session.reconnect()
+                        try:
+                            self.__session.reconnect()
+                        except Exception:
+                            # Do not leave a half-authenticated Session alive.
+                            # The caller can create a fresh Session from stored
+                            # credentials after the next operation observes it
+                            # as closed. Also wake pending audio-key requests.
+                            self.__session.logger.exception(
+                                "Session reconnect failed; closing the broken session")
+                            self.__session.close()
                     break
                 if not self.__running:
                     break
