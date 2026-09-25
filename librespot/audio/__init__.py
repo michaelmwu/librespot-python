@@ -371,7 +371,8 @@ class AudioKeyManager(PacketsReceiver, Closeable):
         def error(self, code: int) -> None:
             self.__audio_key_manager.logger.fatal(
                 "Audio key error, code: {}".format(code))
-            self._complete(result=None)
+            self._complete(error=RuntimeError(
+                "Spotify rejected the audio-key request with error code {}".format(code)))
 
         def fail(self, error: Exception) -> None:
             self._complete(error=error)
